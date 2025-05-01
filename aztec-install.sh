@@ -7,51 +7,30 @@ RESET='\033[0m'
 
 echo -e "${CYAN}${BOLD}"
 echo "-----------------------------------------------------"
-echo "   Aztec Node Install"
+echo "   Aztec install"
 echo "-----------------------------------------------------"
 echo ""
 
-# ====================================================
-# Tự động cài đặt và khởi động node đầy đủ Aztec alpha-testnet
-# Phiên bản: v0.85.0-alpha-testnet.5
-# Chỉ dành cho Ubuntu/Debian, yêu cầu quyền sudo
-# ====================================================
-
-if [ "$(id -u)" -ne 0 ]; then
-  echo "⚠️ Vui lòng chạy script này với quyền root (hoặc sudo)."
-  exit 1
-fi
-
+# Kiểm tra Docker và Docker Compose
 if ! command -v docker &> /dev/null || ! command -v docker-compose &> /dev/null; then
-  echo "[+] Docker hoặc Docker Compose chưa được cài đặt. Đang cài đặt..."
-  apt-get update
-  apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg-agent \
-    software-properties-common
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-  add-apt-repository \
-    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
-    $(lsb_release -cs) stable"
-  apt-get update
-  apt-get install -y docker-ce docker-ce-cli containerd.io
-  curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" \
-    -o /usr/local/bin/docker-compose
-  chmod +x /usr/local/bin/docker-compose
+  echo "[+] Docker hoặc Docker Compose chưa được cài đặt. Vui lòng cài đặt trước khi chạy script."
+  exit 1
 else
   echo "[+] Docker và Docker Compose đã được cài đặt."
 fi
 
+# Kiểm tra Node.js
 if ! command -v node &> /dev/null; then
-  echo "[+] Node.js chưa được cài đặt. Đang cài đặt phiên bản mới nhất..."
-  curl -fsSL https://deb.nodesource.com/setup_current.x | sudo -E bash -
-  apt-get install -y nodejs
+  echo "[+] Node.js chưa được cài đặt. Đang cài đặt bằng nvm..."
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+  nvm install node
 else
   echo "[+] Node.js đã được cài đặt."
 fi
 
+# Cài đặt Aztec CLI
 echo "[+] Đang cài đặt Aztec CLI và chuẩn bị alpha-testnet..."
 curl -sL https://install.aztec.network | bash
 
@@ -64,6 +43,7 @@ fi
 
 aztec-up alpha-testnet
 
+# Yêu cầu người dùng nhập thông tin
 echo -e "\n[i] Hướng dẫn lấy RPC URLs:"
 echo "  - L1 Execution Client (EL) RPC URL:"
 echo "    1. Đăng ký hoặc đăng nhập tại https://dashboard.alchemy.com/"
@@ -81,10 +61,12 @@ read -p "[>] Nhập L1 Consensus (CL) RPC URL: " CONS_RPC
 read -p "[>] Nhập Blob Sink URL (bỏ qua nếu không có): " BLOB_URL
 read -p "[>] Nhập Validator Private Key: " VALIDATOR_PRIVATE_KEY
 
+# Lấy IP công cộng
 echo "[+] Đang lấy địa chỉ IP công cộng..."
 PUBLIC_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
 echo "    → $PUBLIC_IP"
 
+# Tạo file .env
 cat > .env <<EOF
 ETHEREUM_HOSTS="$ETH_RPC"
 L1_CONSENSUS_HOST_URLS="$CONS_RPC"
@@ -103,6 +85,7 @@ if [ -n "$BLOB_URL" ]; then
   BLOB_FLAG="--sequencer.blobSinkUrl \$BLOB_SINK_URL"
 fi
 
+# Tạo file docker-compose.yml
 cat > docker-compose.yml <<EOF
 version: "3.8"
 services:
@@ -125,6 +108,7 @@ EOF
 
 mkdir -p data
 
+# Khởi động node
 echo "[+] Khởi động Aztec full node (docker-compose up -d)..."
 docker-compose up -d
 
